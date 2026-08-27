@@ -3,16 +3,28 @@ services:
     build: .
     ports: ["3000:3000"]
     env_file: .env
+    environment:
+      SEAWEEDFS_S3_ENDPOINT: http://seaweedfs:8333
+      SEAWEEDFS_ACCESS_KEY: economizagv
+      SEAWEEDFS_SECRET_KEY: troque-esta-chave-em-producao
     depends_on:
       schema:
         condition: service_completed_successfully
+      seaweedfs:
+        condition: service_started
   worker:
     build: .
     command: npm run worker:schedule
     env_file: .env
+    environment:
+      SEAWEEDFS_S3_ENDPOINT: http://seaweedfs:8333
+      SEAWEEDFS_ACCESS_KEY: economizagv
+      SEAWEEDFS_SECRET_KEY: troque-esta-chave-em-producao
     depends_on:
       schema:
         condition: service_completed_successfully
+      seaweedfs:
+        condition: service_started
   schema:
     build: .
     command: npm run db:push

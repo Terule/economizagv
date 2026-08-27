@@ -3,11 +3,16 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import sharp from "sharp";
 
 const exec = promisify(execFile);
 
 export type FlyerOffer = { name: string; price: number; confidence: number };
-export type FlyerProductImage = { data: Buffer; text: string };
+export type FlyerProductImage = {
+  data: Buffer;
+  text: string;
+  contentType: "image/jpeg" | "image/png" | "image/webp";
+};
 
 function parseMoney(value: string) {
   return Number(value.replace(/\./g, "").replace(",", "."));
@@ -81,36 +86,73 @@ async function ocrPages(pdfPath: string, directory: string) {
   return stdout;
 }
 
-async function extractEmbeddedImages(pdfPath: string, directory: string) {
+function cardsPerRow(count: number) {
+  if (count <= 4) return count;
+  if (count <= 7) return 7;
+  return 5;
+}
+
+/**
+ * Flyer artwork often places several products in one flattened page image,
+ * rather than embedding one image per product. Render and crop those official
+ * pages into card-sized images so every extracted offer can still display the
+ * visual supplied by the supermarket.
+ */
+async function extractOfferCardImages(
+  pdfPath: string,
+  directory: string,
+  offersByPage: FlyerOffer[][],
+) {
   try {
-    const prefix = join(directory, "product-image");
-    await exec("pdfimages", ["-png", pdfPath, prefix]);
-    const files = (await readdir(directory))
-      .filter(
-        (file) => file.startsWith("product-image-") && file.endsWith(".png"),
-      )
-      .slice(0, 180);
-    const images = await Promise.all(
-      files.map(async (file): Promise<FlyerProductImage | null> => {
-        const path = join(directory, file);
-        const data = await readFile(path);
-        if (data.length < 4_000 || data.length > 3 * 1024 * 1024) return null;
-        try {
-          const { stdout } = await exec("tesseract", [
-            path,
-            "stdout",
-            "-l",
-            "por",
-          ]);
-          return { data, text: stdout };
-        } catch {
-          return { data, text: "" };
-        }
-      }),
-    );
-    return images.filter((image): image is FlyerProductImage => image !== null);
+    const prefix = join(directory, "offer-page");
+    await exec("pdftoppm", ["-r", "150", "-png", pdfPath, prefix]);
+    const renderedPages = (await readdir(directory))
+      .filter((file) => file.startsWith("offer-page-") && /\.png$/i.test(file))
+      .sort((left, right) =>
+        left.localeCompare(right, undefined, { numeric: true }),
+      );
+    const images: FlyerProductImage[] = [];
+
+    for (const [pageIndex, offers] of offersByPage.entries()) {
+      if (!offers.length) continue;
+      const renderedPage = renderedPages[pageIndex];
+      if (!renderedPage) continue;
+      const pagePath = join(directory, renderedPage);
+      const page = sharp(pagePath);
+      const metadata = await page.metadata();
+      if (!metadata.width || !metadata.height) continue;
+
+      const columns = cardsPerRow(offers.length);
+      const rows = Math.ceil(offers.length / columns);
+      const cellWidth = Math.floor(metadata.width / columns);
+      const cellHeight = Math.floor(metadata.height / rows);
+      const horizontalInset = Math.floor(cellWidth * 0.025);
+      const verticalInset = Math.floor(cellHeight * 0.025);
+
+      for (const [offerIndex, offer] of offers.entries()) {
+        const column = offerIndex % columns;
+        const row = Math.floor(offerIndex / columns);
+        const left = column * cellWidth + horizontalInset;
+        const top = row * cellHeight + verticalInset;
+        const width = Math.min(
+          cellWidth - horizontalInset * 2,
+          metadata.width - left,
+        );
+        const height = Math.min(
+          cellHeight - verticalInset * 2,
+          metadata.height - top,
+        );
+        if (width < 32 || height < 32) continue;
+        const data = await sharp(pagePath)
+          .extract({ left, top, width, height })
+          .webp({ quality: 88 })
+          .toBuffer();
+        images.push({ data, text: offer.name, contentType: "image/webp" });
+      }
+    }
+    return images;
   } catch (error) {
-    console.warn("Não foi possível extrair imagens do panfleto", error);
+    console.warn("Não foi possível recortar as ofertas do panfleto", error);
     return [];
   }
 }
@@ -135,10 +177,15 @@ export async function extractPdfOffers(pdf: Buffer) {
     }
     if (text.replace(/\s/g, "").length < 200)
       text = await ocrPages(pdfPath, directory);
-    const [images] = await Promise.all([
-      extractEmbeddedImages(pdfPath, directory),
-    ]);
-    const offers = extractFlyerOffers(text);
+    const offersByPage = text
+      .split("\f")
+      .map((pageText) => extractFlyerOffers(pageText));
+    const offers = offersByPage.flat();
+    const images = await extractOfferCardImages(
+      pdfPath,
+      directory,
+      offersByPage,
+    );
     return { text, offers, images };
   } finally {
     await rm(directory, { recursive: true, force: true });

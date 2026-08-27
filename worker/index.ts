@@ -212,7 +212,7 @@ async function persistOfficialImage(
 }
 
 async function persistFlyerImage(
-  imageData: Buffer,
+  flyerImage: FlyerProductImage,
   productId: string,
   marketId: string,
   marketSlug: string,
@@ -227,8 +227,8 @@ async function persistFlyerImage(
   });
   if (existing) return;
   const image = await putOfficialProductImage(
-    imageData,
-    "image/png",
+    flyerImage.data,
+    flyerImage.contentType,
     marketSlug,
     productId,
   );
@@ -284,7 +284,7 @@ async function processFlyer(
     const image = matchFlyerImage(offer, images, usedImages);
     if (image)
       try {
-        await persistFlyerImage(image.data, product.id, marketId, marketSlug);
+        await persistFlyerImage(image, product.id, marketId, marketSlug);
       } catch (error) {
         console.warn(
           `Imagem do panfleto indisponível para ${product.name}`,
