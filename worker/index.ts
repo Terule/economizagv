@@ -283,7 +283,14 @@ async function processFlyer(
     );
     const image = matchFlyerImage(offer, images, usedImages);
     if (image)
-      await persistFlyerImage(image.data, product.id, marketId, marketSlug);
+      try {
+        await persistFlyerImage(image.data, product.id, marketId, marketSlug);
+      } catch (error) {
+        console.warn(
+          `Imagem do panfleto indisponível para ${product.name}`,
+          error,
+        );
+      }
   }
   return offers.length;
 }

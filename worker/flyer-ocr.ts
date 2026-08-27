@@ -82,36 +82,37 @@ async function ocrPages(pdfPath: string, directory: string) {
 }
 
 async function extractEmbeddedImages(pdfPath: string, directory: string) {
-  const prefix = join(directory, "product-image");
   try {
+    const prefix = join(directory, "product-image");
     await exec("pdfimages", ["-png", pdfPath, prefix]);
-  } catch {
+    const files = (await readdir(directory))
+      .filter(
+        (file) => file.startsWith("product-image-") && file.endsWith(".png"),
+      )
+      .slice(0, 180);
+    const images = await Promise.all(
+      files.map(async (file): Promise<FlyerProductImage | null> => {
+        const path = join(directory, file);
+        const data = await readFile(path);
+        if (data.length < 4_000 || data.length > 3 * 1024 * 1024) return null;
+        try {
+          const { stdout } = await exec("tesseract", [
+            path,
+            "stdout",
+            "-l",
+            "por",
+          ]);
+          return { data, text: stdout };
+        } catch {
+          return { data, text: "" };
+        }
+      }),
+    );
+    return images.filter((image): image is FlyerProductImage => image !== null);
+  } catch (error) {
+    console.warn("Não foi possível extrair imagens do panfleto", error);
     return [];
   }
-  const files = (await readdir(directory))
-    .filter(
-      (file) => file.startsWith("product-image-") && file.endsWith(".png"),
-    )
-    .slice(0, 180);
-  const images = await Promise.all(
-    files.map(async (file): Promise<FlyerProductImage | null> => {
-      const path = join(directory, file);
-      const data = await readFile(path);
-      if (data.length < 4_000 || data.length > 3 * 1024 * 1024) return null;
-      try {
-        const { stdout } = await exec("tesseract", [
-          path,
-          "stdout",
-          "-l",
-          "por",
-        ]);
-        return { data, text: stdout };
-      } catch {
-        return { data, text: "" };
-      }
-    }),
-  );
-  return images.filter((image): image is FlyerProductImage => image !== null);
 }
 
 export async function extractPdfOffers(pdf: Buffer) {
