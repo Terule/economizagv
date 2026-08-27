@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { OfferCarousels } from "@/components/offer-carousels";
 import { products } from "@/lib/demo-data";
 import { entryPrice, recommendedPrice, splitList } from "@/lib/pricing";
 import type { CatalogProduct, ListEntry } from "@/lib/types";
@@ -77,6 +78,7 @@ export function Home() {
           <small>Coelho Diniz · Big Mais · BH</small>
         </div>
       </section>
+      <OfferCarousels />
       <section className="workspace">
         <div className="catalog panel">
           <div className="section-title">

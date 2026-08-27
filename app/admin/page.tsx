@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { AdminLogoUploader } from "@/components/admin-logo-uploader";
 import { auth, isAdmin } from "@/lib/auth";
 
 const reviewItems = [
@@ -80,6 +81,7 @@ export default async function AdminPage() {
           <span>coletas concluídas</span>
         </aside>
       </div>
+      <AdminLogoUploader />
     </main>
   );
 }

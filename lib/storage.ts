@@ -51,6 +51,23 @@ export async function putTemporaryReceipt(file: File) {
   return key;
 }
 
+export async function putMarketLogo(file: File, marketSlug: string) {
+  await ensureBucket();
+  const extension = file.name.includes(".")
+    ? file.name.slice(file.name.lastIndexOf("."))
+    : ".png";
+  const key = `markets/${marketSlug}/logo-${randomUUID()}${extension.toLowerCase()}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: Buffer.from(await file.arrayBuffer()),
+      ContentType: file.type || "image/png",
+    }),
+  );
+  return { key, url: `/api/media/${key}` };
+}
+
 export async function deleteObject(key: string) {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

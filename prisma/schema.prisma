@@ -64,6 +64,8 @@ model Market {
   id       String  @id @default(cuid())
   name     String  @unique
   slug     String  @unique
+  logoUrl  String?
+  logoStorageKey String? @unique
   stores   Store[]
   offers   Offer[]
   receipts Receipt[]
