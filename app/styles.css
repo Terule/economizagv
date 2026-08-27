@@ -377,6 +377,14 @@ input {
 .products {
   border-top: 1px solid var(--line);
 }
+.search-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 24px;
+  color: var(--muted);
+}
 .product {
   border: 0;
   border-bottom: 1px solid #edf0ed;

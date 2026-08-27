@@ -31,8 +31,8 @@ export function Home() {
     (sum, group) => sum + group.total,
     0,
   );
-  const addProduct = (product?: CatalogProduct) => {
-    const name = product?.name ?? newProduct.trim();
+  const addProduct = (product?: CatalogProduct, customLabel?: string) => {
+    const name = product?.name ?? customLabel?.trim() ?? newProduct.trim();
     if (!name) return;
     setEntries((current) => [
       ...current,
@@ -92,6 +92,18 @@ export function Home() {
             />
           </div>
           <div className="products">
+            {visible.length === 0 && query.trim() ? (
+              <div className="search-empty">
+                <span>Nenhum preço encontrado para “{query}”.</span>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => addProduct(undefined, query)}
+                >
+                  Adicionar sem preço
+                </button>
+              </div>
+            ) : null}
             {visible.map((product) => {
               const best = recommendedPrice(product.prices);
               return (
