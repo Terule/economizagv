@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    ports: ["3000:3000"]
+    env_file: .env
+    depends_on: [db]
+  worker:
+    build: .
+    command: npm run worker
+    env_file: .env
+    depends_on: [db]
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.93
+    command: server -s3 -dir=/data -s3.config=/etc/seaweedfs/s3.json
+    ports: ["8333:8333", "9333:9333"]
+    volumes:
+      - seaweed-data:/data
+      - ./infra/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: economiza
+      POSTGRES_PASSWORD: economiza
+      POSTGRES_DB: economizagv
+    ports: ["5432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+volumes:
+  postgres-data:
+  seaweed-data:

@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "economizagv",
+      "credentials": [
+        {
+          "accessKey": "economizagv",
+          "secretKey": "troque-esta-chave-em-producao"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
