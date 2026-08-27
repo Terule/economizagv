@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { db } from "../lib/db";
+import { normalizeProduct } from "../lib/product-normalization";
 import { extractPdfOffers } from "./flyer-ocr";
 
 type Source = { kind: "DAILY_OFFER" | "FLYER"; url: string };
@@ -48,13 +49,6 @@ const markets: Market[] = [
   },
 ];
 
-const normalize = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
 const parsePrice = (value: string) =>
   Number(value.replace("R$", "").replace(".", "").replace(",", ".").trim());
 
@@ -68,7 +62,10 @@ function extractOffers(html: string) {
       $(element).find("img").first().attr("alt")?.trim() ||
       text.replace(/R\$\s*[\d.]+,\d{2}.*/, "").trim();
     if (priceText && name.length > 2 && name.length < 180)
-      offers.set(normalize(name), { name, price: parsePrice(priceText) });
+      offers.set(normalizeProduct(name).normalized, {
+        name,
+        price: parsePrice(priceText),
+      });
   });
   return [...offers.values()];
 }
@@ -80,10 +77,11 @@ async function persistOffer(
   sourceUrl: string,
   source: "DAILY_OFFER" | "FLYER",
 ) {
+  const productData = normalizeProduct(offer.name);
   const product = await db.product.upsert({
-    where: { normalized: normalize(offer.name) },
-    update: { name: offer.name },
-    create: { name: offer.name, normalized: normalize(offer.name) },
+    where: { normalized: productData.normalized },
+    update: productData,
+    create: productData,
   });
   await db.offer.create({
     data: {
