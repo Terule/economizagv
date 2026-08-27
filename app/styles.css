@@ -376,6 +376,18 @@ h2 {
   font-size: 25px;
   margin: 4px 0 14px;
 }
+.offer-carousel {
+  padding: 0 42px;
+}
+.offer-carousel-item {
+  flex: 0 0 100%;
+}
+.offer-carousel [data-slot="carousel-previous"] {
+  left: 0;
+}
+.offer-carousel [data-slot="carousel-next"] {
+  right: 0;
+}
 .offers-section [data-slot="card"] {
   min-height: 175px;
 }
@@ -388,6 +400,16 @@ h2 {
 .offers-section [data-slot="card-content"] small {
   color: var(--muted);
   margin: 0;
+}
+@media (min-width: 720px) {
+  .offer-carousel-item {
+    flex-basis: 50%;
+  }
+}
+@media (min-width: 1024px) {
+  .offer-carousel-item {
+    flex-basis: 33.333%;
+  }
 }
 .offers-section [data-slot="card-content"] b {
   color: var(--green);

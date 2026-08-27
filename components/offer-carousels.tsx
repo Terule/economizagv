@@ -1,7 +1,13 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Carousel,
   CarouselContent,
@@ -31,18 +37,12 @@ function OffersCarousel({
         <span className="eyebrow">ECONOMIZA GV</span>
         <h2>{title}</h2>
       </div>
-      <Carousel
-        className="w-full"
-        opts={{ align: "start", loop: items.length > 3 }}
-      >
-        <CarouselContent className="ml-0 px-10">
+      <Carousel className="offer-carousel" opts={{ align: "start" }}>
+        <CarouselContent>
           {items.map((product) => {
             const price = recommendedPrice(product.prices);
             return (
-              <CarouselItem
-                className="basis-72 pl-3 sm:basis-80"
-                key={product.id}
-              >
+              <CarouselItem className="offer-carousel-item" key={product.id}>
                 <Card>
                   <CardHeader>
                     <Badge
@@ -54,12 +54,14 @@ function OffersCarousel({
                         ? "Oferta vigente"
                         : "Menor estimativa"}
                     </Badge>
-                    <CardTitle>{product.name}</CardTitle>
+                    <CardTitle className="line-clamp-2">
+                      {product.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {product.brand} · {product.packageSize}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p>
-                      {product.brand} · {product.packageSize}
-                    </p>
                     <b>{price ? money.format(price.amount) : "Sem preço"}</b>
                     <small>
                       {price
