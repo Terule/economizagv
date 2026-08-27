@@ -93,6 +93,26 @@ export async function putOfficialProductImage(
   return { key, url: `/api/media/${key}` };
 }
 
+export async function putApprovedProductImage(file: File, productId: string) {
+  await ensureBucket();
+  const extension =
+    file.type === "image/png"
+      ? "png"
+      : file.type === "image/webp"
+        ? "webp"
+        : "jpg";
+  const key = `products/admin/${productId}/${randomUUID()}.${extension}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: Buffer.from(await file.arrayBuffer()),
+      ContentType: file.type,
+    }),
+  );
+  return { key, url: `/api/media/${key}` };
+}
+
 export async function deleteObject(key: string) {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

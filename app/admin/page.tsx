@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminLogoUploader } from "@/components/admin-logo-uploader";
 import { AdminOfferReview } from "@/components/admin-offer-review";
+import { AdminProductImageUploader } from "@/components/admin-product-image-uploader";
 import { auth, isAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { findDuplicatePairs, findProductMatches } from "@/lib/product-match";
@@ -98,6 +99,13 @@ export default async function AdminPage() {
           <span>coletas concluídas</span>
         </aside>
       </div>
+      <AdminProductImageUploader
+        products={catalogProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          packageSize: product.packageSize,
+        }))}
+      />
       <AdminLogoUploader />
     </main>
   );
