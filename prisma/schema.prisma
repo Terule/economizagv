@@ -67,6 +67,32 @@ model Market {
   stores   Store[]
   offers   Offer[]
   receipts Receipt[]
+  collectionRuns CollectionRun[]
+  sourceDocuments SourceDocument[]
+}
+
+model CollectionRun {
+  id         String           @id @default(cuid())
+  marketId   String
+  status     CollectionStatus
+  startedAt  DateTime         @default(now())
+  endedAt    DateTime?
+  discovered Int              @default(0)
+  published  Int              @default(0)
+  error      String?
+  market     Market           @relation(fields: [marketId], references: [id], onDelete: Cascade)
+}
+
+model SourceDocument {
+  id        String       @id @default(cuid())
+  marketId  String
+  url       String
+  kind      OfferSource
+  title     String?
+  fetchedAt DateTime     @default(now())
+  status    ReviewStatus @default(PENDING)
+  market    Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  @@unique([marketId, url])
 }
 
 model Store {
@@ -205,4 +231,10 @@ enum ReviewStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum CollectionStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }
