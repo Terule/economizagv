@@ -80,8 +80,8 @@ function OffersCarousel({
             );
           })}
         </CarouselContent>
-        <CarouselPrevious className="left-0" />
-        <CarouselNext className="right-0" />
+        <CarouselPrevious />
+        <CarouselNext />
       </Carousel>
     </section>
   );

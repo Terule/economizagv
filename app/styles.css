@@ -379,14 +379,6 @@ h2 {
 .offer-carousel {
   width: 1044px;
   max-width: 100%;
-  margin: 0 auto;
-  padding: 0 42px;
-}
-.offer-carousel [data-slot="carousel-previous"] {
-  left: 0;
-}
-.offer-carousel [data-slot="carousel-next"] {
-  right: 0;
 }
 .offers-section [data-slot="card"] {
   width: 320px;
