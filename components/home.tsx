@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { OfferCarousels } from "@/components/offer-carousels";
 import { ProductThumbnail } from "@/components/product-thumbnail";
+import { authClient } from "@/lib/auth-client";
 import { entryPrice, recommendedPrice, splitList } from "@/lib/pricing";
 import type { CatalogProduct, ListEntry } from "@/lib/types";
 
@@ -32,6 +33,14 @@ type ApiProduct = {
   images: Array<{ url: string }>;
   offers: ApiOffer[];
 };
+type SavedListItem = {
+  id: string;
+  label: string;
+  productId: string | null;
+  quantity: number;
+  manualPrice: string | number | null;
+};
+type SavedList = { id: string; name: string; items: SavedListItem[] };
 function toCatalogProduct(product: ApiProduct): CatalogProduct {
   return {
     id: product.id,
@@ -57,14 +66,29 @@ function toCatalogProduct(product: ApiProduct): CatalogProduct {
     })),
   };
 }
+function hydrateList(list: SavedList, products: CatalogProduct[]): ListEntry[] {
+  return list.items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    product: products.find((product) => product.id === item.productId),
+    quantity: item.quantity,
+    manualPrice:
+      item.manualPrice === null ? undefined : Number(item.manualPrice),
+  }));
+}
 
 export function Home() {
+  const { data: session } = authClient.useSession();
+  const userId = session?.user?.id;
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<ListEntry[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [selected, setSelected] = useState<CatalogProduct | null>(null);
   const [newProduct, setNewProduct] = useState("");
   const [manualPrice, setManualPrice] = useState("");
+  const [savedLists, setSavedLists] = useState<SavedList[]>([]);
+  const [activeListId, setActiveListId] = useState<string>();
+  const [listName, setListName] = useState("");
   useEffect(() => {
     fetch("/api/products")
       .then((response) => (response.ok ? response.json() : []))
@@ -72,6 +96,25 @@ export function Home() {
         setProducts(catalog.map(toCatalogProduct)),
       );
   }, []);
+  useEffect(() => {
+    if (!userId) {
+      setSavedLists([]);
+      setActiveListId(undefined);
+      return;
+    }
+    fetch("/api/lists")
+      .then((response) => (response.ok ? response.json() : []))
+      .then((lists: SavedList[]) => {
+        setSavedLists(lists);
+        setActiveListId((current) => current ?? lists[0]?.id);
+      });
+  }, [userId]);
+  useEffect(() => {
+    const list = savedLists.find((item) => item.id === activeListId);
+    if (!list) return;
+    setListName(list.name);
+    setEntries(hydrateList(list, products));
+  }, [activeListId, products, savedLists]);
   const visible = products.filter((product) =>
     `${product.name} ${product.brand}`
       .toLowerCase()
@@ -82,23 +125,117 @@ export function Home() {
     (sum, group) => sum + group.total,
     0,
   );
+  const createList = async (name = "Minha compra", clearEntries = true) => {
+    const response = await fetch("/api/lists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) return;
+    const list = (await response.json()) as SavedList;
+    setSavedLists((current) => [list, ...current]);
+    setActiveListId(list.id);
+    setListName(list.name);
+    if (clearEntries) setEntries([]);
+    return list.id;
+  };
+  const persistItem = async (entry: ListEntry) => {
+    if (!session?.user) return;
+    const listId = activeListId ?? (await createList("Minha compra", false));
+    if (!listId) return;
+    const response = await fetch(`/api/lists/${listId}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: entry.label,
+        productId: entry.product?.id,
+        quantity: entry.quantity,
+        manualPrice: entry.manualPrice,
+      }),
+    });
+    if (!response.ok) return;
+    const saved = (await response.json()) as SavedListItem;
+    setSavedLists((current) =>
+      current.map((list) =>
+        list.id === listId ? { ...list, items: [...list.items, saved] } : list,
+      ),
+    );
+    setEntries((current) =>
+      current.map((item) =>
+        item.id === entry.id ? { ...item, id: saved.id } : item,
+      ),
+    );
+  };
   const addProduct = (product?: CatalogProduct, customLabel?: string) => {
     const name = product?.name ?? customLabel?.trim() ?? newProduct.trim();
     if (!name) return;
-    setEntries((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        label: name,
-        product,
-        quantity: 1,
-        manualPrice: manualPrice
-          ? Number(manualPrice.replace(",", "."))
-          : undefined,
-      },
-    ]);
+    const entry = {
+      id: crypto.randomUUID(),
+      label: name,
+      product,
+      quantity: 1,
+      manualPrice: manualPrice
+        ? Number(manualPrice.replace(",", "."))
+        : undefined,
+    };
+    setEntries((current) => [...current, entry]);
+    void persistItem(entry);
     setNewProduct("");
     setManualPrice("");
+  };
+  const updateEntry = (
+    id: string,
+    changes: Partial<Pick<ListEntry, "quantity" | "manualPrice">>,
+  ) => {
+    setEntries((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+    );
+    setSavedLists((current) =>
+      current.map((list) =>
+        list.id === activeListId
+          ? {
+              ...list,
+              items: list.items.map((item) =>
+                item.id === id ? { ...item, ...changes } : item,
+              ),
+            }
+          : list,
+      ),
+    );
+    if (session?.user && activeListId)
+      void fetch(`/api/lists/${activeListId}/items/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+  };
+  const removeEntry = (id: string) => {
+    setEntries((current) => current.filter((item) => item.id !== id));
+    setSavedLists((current) =>
+      current.map((list) =>
+        list.id === activeListId
+          ? { ...list, items: list.items.filter((item) => item.id !== id) }
+          : list,
+      ),
+    );
+    if (session?.user && activeListId)
+      void fetch(`/api/lists/${activeListId}/items/${id}`, {
+        method: "DELETE",
+      });
+  };
+  const renameList = async () => {
+    if (!activeListId || !listName.trim()) return;
+    const response = await fetch(`/api/lists/${activeListId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: listName }),
+    });
+    if (!response.ok) return;
+    setSavedLists((current) =>
+      current.map((list) =>
+        list.id === activeListId ? { ...list, name: listName.trim() } : list,
+      ),
+    );
   };
   return (
     <main>
@@ -107,9 +244,13 @@ export function Home() {
           economiza<span>gv</span>
         </a>
         <p>Preços de supermercado em Governador Valadares</p>
-        <a className="login" href="/login">
-          Entrar com Google
-        </a>
+        {session?.user ? (
+          <span className="login">Olá, {session.user.name}</span>
+        ) : (
+          <a className="login" href="/login">
+            Entrar com Google
+          </a>
+        )}
       </header>
       <section className="hero">
         <div>
@@ -299,8 +440,57 @@ export function Home() {
             <span className="eyebrow">MINHA LISTA</span>
             <h2>Compra inteligente</h2>
           </div>
-          <b className="total">{money.format(total)}</b>
+          <div className="list-total">
+            <b className="total">{money.format(total)}</b>
+            {session?.user ? (
+              <div className="list-controls">
+                <select
+                  aria-label="Lista de compras ativa"
+                  onChange={(event) => setActiveListId(event.target.value)}
+                  value={activeListId ?? ""}
+                >
+                  {savedLists.length === 0 ? (
+                    <option value="">Minha compra</option>
+                  ) : null}
+                  {savedLists.map((list) => (
+                    <option key={list.id} value={list.id}>
+                      {list.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="secondary small"
+                  onClick={() => void createList("Nova lista")}
+                  type="button"
+                >
+                  Nova lista
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
+        {session?.user && activeListId ? (
+          <div className="saved-list-name">
+            <input
+              aria-label="Nome da lista"
+              onChange={(event) => setListName(event.target.value)}
+              value={listName}
+            />
+            <button
+              className="secondary small"
+              onClick={renameList}
+              type="button"
+            >
+              Renomear
+            </button>
+          </div>
+        ) : null}
+        {!session?.user ? (
+          <p className="list-signin">
+            <a href="/login">Entre com Google</a> para salvar esta lista e
+            acessá-la de outro dispositivo.
+          </p>
+        ) : null}
         {entries.length === 0 ? (
           <div className="empty">
             Adicione produtos para ver onde comprar cada um pelo melhor preço.
@@ -326,16 +516,9 @@ export function Home() {
                           type="button"
                           aria-label="Diminuir quantidade"
                           onClick={() =>
-                            setEntries((items) =>
-                              items.map((item) =>
-                                item.id === entry.id
-                                  ? {
-                                      ...item,
-                                      quantity: Math.max(1, item.quantity - 1),
-                                    }
-                                  : item,
-                              ),
-                            )
+                            updateEntry(entry.id, {
+                              quantity: Math.max(1, entry.quantity - 1),
+                            })
                           }
                         >
                           −
@@ -345,13 +528,9 @@ export function Home() {
                           type="button"
                           aria-label="Aumentar quantidade"
                           onClick={() =>
-                            setEntries((items) =>
-                              items.map((item) =>
-                                item.id === entry.id
-                                  ? { ...item, quantity: item.quantity + 1 }
-                                  : item,
-                              ),
-                            )
+                            updateEntry(entry.id, {
+                              quantity: entry.quantity + 1,
+                            })
                           }
                         >
                           +
@@ -364,11 +543,7 @@ export function Home() {
                         <button
                           type="button"
                           className="remove"
-                          onClick={() =>
-                            setEntries((items) =>
-                              items.filter((item) => item.id !== entry.id),
-                            )
-                          }
+                          onClick={() => removeEntry(entry.id)}
                         >
                           ×
                         </button>
