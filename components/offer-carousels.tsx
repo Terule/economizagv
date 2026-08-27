@@ -46,7 +46,7 @@ function OffersCarousel({
             const price = recommendedPrice(product.prices);
             return (
               <CarouselItem
-                className="basis-80 shrink-0 grow-0"
+                className="basis-[336px] shrink-0 grow-0"
                 key={product.id}
               >
                 <Card>
