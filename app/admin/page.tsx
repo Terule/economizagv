@@ -1,32 +1,30 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminLogoUploader } from "@/components/admin-logo-uploader";
+import { AdminOfferReview } from "@/components/admin-offer-review";
 import { auth, isAdmin } from "@/lib/auth";
-
-const reviewItems = [
-  {
-    type: "Cupom fiscal",
-    title: "Big Mais · Esplanada",
-    detail: "Data declarada 26/08 · OCR identificou 25/08",
-    status: "Conflito de data",
-  },
-  {
-    type: "OCR",
-    title: "Panfleto Coelho Diniz",
-    detail: "Detergente Ypê 500 ml · preço lido: R$ 2,?9",
-    status: "Baixa confiança",
-  },
-  {
-    type: "Imagem",
-    title: "Café Pilão 500 g",
-    detail: "Imagem web aguardando moderação",
-    status: "Pendente",
-  },
-];
+import { db } from "@/lib/db";
 
 export default async function AdminPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!isAdmin(session?.user.email)) redirect("/");
+  const [pendingOffers, approvedCount, completedRuns] = await Promise.all([
+    db.offer.findMany({
+      where: { reviewState: "PENDING", source: "FLYER" },
+      include: { product: true, market: true, store: true },
+      orderBy: { capturedAt: "desc" },
+    }),
+    db.offer.count({ where: { reviewState: "APPROVED" } }),
+    db.collectionRun.count({ where: { status: "COMPLETED" } }),
+  ]);
+  const reviewOffers = pendingOffers.map((offer) => ({
+    id: offer.id,
+    name: offer.product.name,
+    price: offer.price.toFixed(2).replace(".", ","),
+    confidence: offer.confidence,
+    market: offer.market.name,
+    district: offer.store.district,
+  }));
   return (
     <main className="admin-page">
       <header>
@@ -47,37 +45,19 @@ export default async function AdminPage() {
         <section className="panel review-panel">
           <div className="section-title">
             <h2>Pendências</h2>
-            <b>{reviewItems.length}</b>
+            <b>{reviewOffers.length}</b>
           </div>
-          {reviewItems.map((item) => (
-            <article className="review-item" key={item.title}>
-              <span className="tag">{item.type}</span>
-              <h3>{item.title}</h3>
-              <p>{item.detail}</p>
-              <span className="warning">{item.status}</span>
-              <div>
-                <button type="button" className="secondary">
-                  Corrigir
-                </button>
-                <button type="button" className="primary small">
-                  Aprovar
-                </button>
-                <button type="button" className="reject">
-                  Rejeitar
-                </button>
-              </div>
-            </article>
-          ))}
+          <AdminOfferReview offers={reviewOffers} />
         </section>
         <aside className="panel metrics">
           <span className="eyebrow">HOJE</span>
-          <b>3</b>
+          <b>{reviewOffers.length}</b>
           <span>itens aguardando revisão</span>
           <hr />
-          <b>18</b>
+          <b>{approvedCount}</b>
           <span>ofertas publicadas</span>
           <hr />
-          <b>2</b>
+          <b>{completedRuns}</b>
           <span>coletas concluídas</span>
         </aside>
       </div>

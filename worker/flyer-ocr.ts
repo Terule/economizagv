@@ -12,6 +12,33 @@ function parseMoney(value: string) {
   return Number(value.replace(/\./g, "").replace(",", "."));
 }
 
+const ignoredName =
+  /\b(?:exclusivo|oferta|preco|preço|desconto|pague|leve|unidade|cada|r\$)\b/i;
+const packageTerm =
+  /\b(?:\d+(?:[.,]\d+)?\s?(?:g|kg|ml|l)|sach[eê]|cápsula|pcte|pacote|unid(?:ade)?s?)\b/gi;
+
+function candidateConfidence(name: string) {
+  const words = name.match(/[a-záàâãéêíóôõúç]{3,}/gi) ?? [];
+  const productWords = words.filter(
+    (word) =>
+      !/^(gramas?|litros?|metros?|unidades?|fragrancias?|sabores?)$/i.test(
+        word,
+      ),
+  );
+  const packages = name.match(packageTerm)?.length ?? 0;
+  const separators = (name.match(/\|/g) ?? []).length;
+
+  if (
+    ignoredName.test(name) ||
+    productWords.length === 0 ||
+    separators > 1 ||
+    packages > 2
+  )
+    return 0;
+  if (productWords.length === 1 && packages === 0) return 0.45;
+  return packages > 0 ? 0.9 : 0.7;
+}
+
 /**
  * Produces conservative candidates: a candidate always needs a Brazilian price
  * and nearby descriptive text. Low-confidence candidates stay in admin review.
@@ -35,10 +62,9 @@ export function extractFlyerOffers(text: string): FlyerOffer[] {
       .replace(/\b\d+[.,]\d{2}\b/g, "")
       .trim();
     const price = parseMoney(match[1]);
-    if (name.length < 4 || name.length > 180 || price <= 0) continue;
-    const confidence = /\b(?:g|kg|ml|l|sach[eê]|cápsula|pcte|unid)/i.test(name)
-      ? 0.82
-      : 0.58;
+    if (name.length < 4 || name.length > 120 || price <= 0) continue;
+    const confidence = candidateConfidence(name);
+    if (confidence === 0) continue;
     candidates.set(`${name}-${price}`, { name, price, confidence });
   }
   return [...candidates.values()];

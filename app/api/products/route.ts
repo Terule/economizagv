@@ -4,9 +4,10 @@ import { db } from "@/lib/db";
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams.get("q")?.trim();
   const products = await db.product.findMany({
-    where: query
-      ? { name: { contains: query, mode: "insensitive" } }
-      : undefined,
+    where: {
+      ...(query ? { name: { contains: query, mode: "insensitive" } } : {}),
+      offers: { some: { reviewState: "APPROVED" } },
+    },
     include: {
       offers: {
         where: { reviewState: "APPROVED" },
