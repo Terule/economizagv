@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { db } from "../lib/db";
 import { normalizeProduct } from "../lib/product-normalization";
 import { putOfficialProductImage } from "../lib/storage";
-import { extractPdfOffers } from "./flyer-ocr";
+import { extractPdfOffers, type FlyerProductImage } from "./flyer-ocr";
 
 type Source = { kind: "DAILY_OFFER" | "FLYER"; url: string };
 type Market = {
@@ -54,6 +54,47 @@ type ExtractedOffer = { name: string; price: number; imageUrl?: string };
 
 const parsePrice = (value: string) =>
   Number(value.replace("R$", "").replace(".", "").replace(",", ".").trim());
+
+function words(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .match(/[a-z]{4,}/g)
+      ?.filter(
+        (word) =>
+          !["oferta", "preco", "precos", "unidade", "fragrancias"].includes(
+            word,
+          ),
+      ) ?? [],
+  );
+}
+
+function matchFlyerImage(
+  offer: ExtractedOffer,
+  images: FlyerProductImage[],
+  usedImages: Set<number>,
+) {
+  const offerWords = words(offer.name);
+  let winner: {
+    image: FlyerProductImage;
+    index: number;
+    score: number;
+  } | null = null;
+  for (const [index, image] of images.entries()) {
+    if (usedImages.has(index)) continue;
+    const shared = [...offerWords].filter((word) =>
+      words(image.text).has(word),
+    );
+    const score = shared.length / Math.max(1, offerWords.size);
+    if (shared.length > 0 && (!winner || score > winner.score))
+      winner = { image, index, score };
+  }
+  if (!winner || winner.score < 0.25) return null;
+  usedImages.add(winner.index);
+  return winner.image;
+}
 
 function extractOffers(html: string, sourceUrl: string) {
   const $ = cheerio.load(html);
@@ -118,6 +159,7 @@ async function persistOffer(
       reviewState: (offer.confidence ?? 1) >= 0.8 ? "APPROVED" : "PENDING",
     },
   });
+  return product;
 }
 
 async function persistOfficialImage(
@@ -169,12 +211,50 @@ async function persistOfficialImage(
   });
 }
 
-async function processFlyer(url: string, marketId: string, storeId: string) {
+async function persistFlyerImage(
+  imageData: Buffer,
+  productId: string,
+  marketId: string,
+  marketSlug: string,
+) {
+  const existing = await db.productImage.findFirst({
+    where: {
+      productId,
+      marketId,
+      source: "MARKET",
+      status: "APPROVED",
+    },
+  });
+  if (existing) return;
+  const image = await putOfficialProductImage(
+    imageData,
+    "image/png",
+    marketSlug,
+    productId,
+  );
+  await db.productImage.create({
+    data: {
+      productId,
+      marketId,
+      url: image.url,
+      storageKey: image.key,
+      source: "MARKET",
+      status: "APPROVED",
+    },
+  });
+}
+
+async function processFlyer(
+  url: string,
+  marketId: string,
+  storeId: string,
+  marketSlug: string,
+) {
   const response = await fetch(url, {
     headers: { "User-Agent": "EconomizaGV/1.0" },
   });
   if (!response.ok) throw new Error(`${response.status} ao baixar ${url}`);
-  const { text, offers } = await extractPdfOffers(
+  const { text, offers, images } = await extractPdfOffers(
     Buffer.from(await response.arrayBuffer()),
   );
   const document = await db.sourceDocument.update({
@@ -191,8 +271,20 @@ async function processFlyer(url: string, marketId: string, storeId: string) {
   await db.offer.deleteMany({
     where: { marketId, storeId, sourceUrl: document.url },
   });
-  for (const offer of offers)
-    await persistOffer(offer, marketId, storeId, "", url, "FLYER");
+  const usedImages = new Set<number>();
+  for (const offer of offers) {
+    const product = await persistOffer(
+      offer,
+      marketId,
+      storeId,
+      marketSlug,
+      url,
+      "FLYER",
+    );
+    const image = matchFlyerImage(offer, images, usedImages);
+    if (image)
+      await persistFlyerImage(image.data, product.id, marketId, marketSlug);
+  }
   return offers.length;
 }
 
@@ -264,7 +356,7 @@ async function ingest(definition: Market) {
       for (const url of urls.filter((url) =>
         url.toLowerCase().includes(".pdf"),
       )) {
-        const count = await processFlyer(url, market.id, store.id);
+        const count = await processFlyer(url, market.id, store.id, market.slug);
         discovered += count;
         published += count;
       }

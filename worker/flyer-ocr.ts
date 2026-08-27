@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 
 export type FlyerOffer = { name: string; price: number; confidence: number };
+export type FlyerProductImage = { data: Buffer; text: string };
 
 function parseMoney(value: string) {
   return Number(value.replace(/\./g, "").replace(",", "."));
@@ -80,6 +81,39 @@ async function ocrPages(pdfPath: string, directory: string) {
   return stdout;
 }
 
+async function extractEmbeddedImages(pdfPath: string, directory: string) {
+  const prefix = join(directory, "product-image");
+  try {
+    await exec("pdfimages", ["-png", pdfPath, prefix]);
+  } catch {
+    return [];
+  }
+  const files = (await readdir(directory))
+    .filter(
+      (file) => file.startsWith("product-image-") && file.endsWith(".png"),
+    )
+    .slice(0, 180);
+  const images = await Promise.all(
+    files.map(async (file): Promise<FlyerProductImage | null> => {
+      const path = join(directory, file);
+      const data = await readFile(path);
+      if (data.length < 4_000 || data.length > 3 * 1024 * 1024) return null;
+      try {
+        const { stdout } = await exec("tesseract", [
+          path,
+          "stdout",
+          "-l",
+          "por",
+        ]);
+        return { data, text: stdout };
+      } catch {
+        return { data, text: "" };
+      }
+    }),
+  );
+  return images.filter((image): image is FlyerProductImage => image !== null);
+}
+
 export async function extractPdfOffers(pdf: Buffer) {
   const directory = await mkdtemp(join(tmpdir(), "economizagv-flyer-"));
   const pdfPath = join(directory, "flyer.pdf");
@@ -100,8 +134,11 @@ export async function extractPdfOffers(pdf: Buffer) {
     }
     if (text.replace(/\s/g, "").length < 200)
       text = await ocrPages(pdfPath, directory);
+    const [images] = await Promise.all([
+      extractEmbeddedImages(pdfPath, directory),
+    ]);
     const offers = extractFlyerOffers(text);
-    return { text, offers };
+    return { text, offers, images };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
