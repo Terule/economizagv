@@ -385,6 +385,29 @@ h2 {
   height: 260px;
   min-height: 260px;
 }
+.offer-card-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.product-thumbnail {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: contain;
+  background: #fff;
+}
+.product-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--green);
+  background: var(--muted);
+  font-weight: 800;
+}
 .offers-section [data-slot="card-content"] {
   display: flex;
   flex-direction: column;

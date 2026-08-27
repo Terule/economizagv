@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { db } from "../lib/db";
 import { normalizeProduct } from "../lib/product-normalization";
+import { putOfficialProductImage } from "../lib/storage";
 import { extractPdfOffers } from "./flyer-ocr";
 
 type Source = { kind: "DAILY_OFFER" | "FLYER"; url: string };
@@ -49,31 +50,39 @@ const markets: Market[] = [
   },
 ];
 
+type ExtractedOffer = { name: string; price: number; imageUrl?: string };
+
 const parsePrice = (value: string) =>
   Number(value.replace("R$", "").replace(".", "").replace(",", ".").trim());
 
-function extractOffers(html: string) {
+function extractOffers(html: string, sourceUrl: string) {
   const $ = cheerio.load(html);
-  const offers = new Map<string, { name: string; price: number }>();
+  const offers = new Map<string, ExtractedOffer>();
   $("article, li, .product, .produto, .item").each((_, element) => {
     const text = $(element).text().replace(/\s+/g, " ").trim();
     const priceText = text.match(/R\$\s*[\d.]+,\d{2}/)?.[0];
     const name =
       $(element).find("img").first().attr("alt")?.trim() ||
       text.replace(/R\$\s*[\d.]+,\d{2}.*/, "").trim();
+    const image = $(element).find("img").first();
+    const imageUrl = image.attr("data-src") ?? image.attr("src");
     if (priceText && name.length > 2 && name.length < 180)
       offers.set(normalizeProduct(name).normalized, {
         name,
         price: parsePrice(priceText),
+        imageUrl: imageUrl
+          ? new URL(imageUrl, sourceUrl).toString()
+          : undefined,
       });
   });
   return [...offers.values()];
 }
 
 async function persistOffer(
-  offer: { name: string; price: number; confidence?: number },
+  offer: ExtractedOffer & { confidence?: number },
   marketId: string,
   storeId: string,
+  marketSlug: string,
   sourceUrl: string,
   source: "DAILY_OFFER" | "FLYER",
 ) {
@@ -83,6 +92,18 @@ async function persistOffer(
     update: productData,
     create: productData,
   });
+  if (offer.imageUrl) {
+    try {
+      await persistOfficialImage(
+        offer.imageUrl,
+        product.id,
+        marketId,
+        marketSlug,
+      );
+    } catch (error) {
+      console.warn(`Imagem oficial indisponível para ${product.name}`, error);
+    }
+  }
   await db.offer.create({
     data: {
       productId: product.id,
@@ -95,6 +116,55 @@ async function persistOffer(
       validFrom: new Date(),
       confidence: offer.confidence ?? 1,
       reviewState: (offer.confidence ?? 1) >= 0.8 ? "APPROVED" : "PENDING",
+    },
+  });
+}
+
+async function persistOfficialImage(
+  imageUrl: string,
+  productId: string,
+  marketId: string,
+  marketSlug: string,
+) {
+  const existing = await db.productImage.findFirst({
+    where: {
+      productId,
+      marketId,
+      source: "MARKET",
+      status: "APPROVED",
+    },
+  });
+  if (existing) return;
+  const response = await fetch(imageUrl, {
+    headers: { "User-Agent": "EconomizaGV/1.0" },
+  });
+  const contentType = response.headers.get("content-type")?.split(";")[0];
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (
+    !response.ok ||
+    !["image/jpeg", "image/png", "image/webp"].includes(contentType ?? "") ||
+    bytes.length === 0 ||
+    bytes.length > 5 * 1024 * 1024
+  )
+    throw new Error("arquivo de imagem inválido");
+  const imageContentType = contentType as
+    | "image/jpeg"
+    | "image/png"
+    | "image/webp";
+  const image = await putOfficialProductImage(
+    bytes,
+    imageContentType,
+    marketSlug,
+    productId,
+  );
+  await db.productImage.create({
+    data: {
+      productId,
+      marketId,
+      url: image.url,
+      storageKey: image.key,
+      source: "MARKET",
+      status: "APPROVED",
     },
   });
 }
@@ -122,7 +192,7 @@ async function processFlyer(url: string, marketId: string, storeId: string) {
     where: { marketId, storeId, sourceUrl: document.url },
   });
   for (const offer of offers)
-    await persistOffer(offer, marketId, storeId, url, "FLYER");
+    await persistOffer(offer, marketId, storeId, "", url, "FLYER");
   return offers.length;
 }
 
@@ -178,10 +248,17 @@ async function ingest(definition: Market) {
         ),
       );
       for (const offer of source.kind === "DAILY_OFFER"
-        ? extractOffers(html)
+        ? extractOffers(html, source.url)
         : []) {
         discovered++;
-        await persistOffer(offer, market.id, store.id, source.url, source.kind);
+        await persistOffer(
+          offer,
+          market.id,
+          store.id,
+          market.slug,
+          source.url,
+          source.kind,
+        );
         published++;
       }
       for (const url of urls.filter((url) =>

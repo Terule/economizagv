@@ -9,6 +9,11 @@ export async function GET(request: Request) {
       offers: { some: { reviewState: "APPROVED" } },
     },
     include: {
+      images: {
+        where: { status: "APPROVED" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
       offers: {
         where: { reviewState: "APPROVED" },
         include: { market: true, store: true },

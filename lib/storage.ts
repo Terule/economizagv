@@ -68,6 +68,31 @@ export async function putMarketLogo(file: File, marketSlug: string) {
   return { key, url: `/api/media/${key}` };
 }
 
+export async function putOfficialProductImage(
+  image: Buffer,
+  contentType: string,
+  marketSlug: string,
+  productId: string,
+) {
+  await ensureBucket();
+  const extension =
+    contentType === "image/png"
+      ? "png"
+      : contentType === "image/webp"
+        ? "webp"
+        : "jpg";
+  const key = `products/${marketSlug}/${productId}/${randomUUID()}.${extension}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: image,
+      ContentType: contentType,
+    }),
+  );
+  return { key, url: `/api/media/${key}` };
+}
+
 export async function deleteObject(key: string) {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { OfferCarousels } from "@/components/offer-carousels";
+import { ProductThumbnail } from "@/components/product-thumbnail";
 import { entryPrice, recommendedPrice, splitList } from "@/lib/pricing";
 import type { CatalogProduct, ListEntry } from "@/lib/types";
 
@@ -28,6 +29,7 @@ type ApiProduct = {
   name: string;
   brand: string | null;
   packageSize: string | null;
+  images: Array<{ url: string }>;
   offers: ApiOffer[];
 };
 function toCatalogProduct(product: ApiProduct): CatalogProduct {
@@ -36,6 +38,7 @@ function toCatalogProduct(product: ApiProduct): CatalogProduct {
     name: product.name,
     brand: product.brand ?? "Sem marca",
     packageSize: product.packageSize ?? "Embalagem não informada",
+    image: product.images[0]?.url,
     prices: product.offers.map((offer) => ({
       id: offer.id,
       market: offer.market.name,
@@ -168,7 +171,10 @@ export function Home() {
                   key={product.id}
                   onClick={() => setSelected(product)}
                 >
-                  <span className="photo">{product.brand.slice(0, 1)}</span>
+                  <ProductThumbnail
+                    image={product.image}
+                    name={product.brand}
+                  />
                   <span className="product-copy">
                     <b>{product.name}</b>
                     <small>

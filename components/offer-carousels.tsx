@@ -1,5 +1,6 @@
 "use client";
 
+import { ProductThumbnail } from "@/components/product-thumbnail";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -51,15 +52,21 @@ function OffersCarousel({
               >
                 <Card>
                   <CardHeader>
-                    <Badge
-                      variant={
-                        price?.type === "vigente" ? "default" : "secondary"
-                      }
-                    >
-                      {price?.type === "vigente"
-                        ? "Oferta vigente"
-                        : "Menor estimativa"}
-                    </Badge>
+                    <div className="offer-card-label">
+                      <Badge
+                        variant={
+                          price?.type === "vigente" ? "default" : "secondary"
+                        }
+                      >
+                        {price?.type === "vigente"
+                          ? "Oferta vigente"
+                          : "Menor estimativa"}
+                      </Badge>
+                      <ProductThumbnail
+                        image={product.image}
+                        name={product.name}
+                      />
+                    </div>
                     <CardTitle className="line-clamp-2">
                       {product.name}
                     </CardTitle>
