@@ -12,6 +12,7 @@ export type ProductPrice = {
   type: Exclude<PriceType, "manual_privado">;
   referenceDate: string;
   validUntil?: string;
+  image?: string;
 };
 
 export type CatalogProduct = {
@@ -20,6 +21,7 @@ export type CatalogProduct = {
   brand: string;
   packageSize: string;
   image?: string;
+  marketImages?: { market: string; url: string }[];
   prices: ProductPrice[];
   alternatives?: { name: string; amount: number; market: string }[];
 };

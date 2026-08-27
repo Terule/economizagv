@@ -11,8 +11,8 @@ export async function GET(request: Request) {
     include: {
       images: {
         where: { status: "APPROVED" },
+        include: { market: true },
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
       offers: {
         where: { reviewState: "APPROVED" },

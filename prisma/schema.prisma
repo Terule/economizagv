@@ -71,6 +71,7 @@ model Market {
   receipts Receipt[]
   collectionRuns CollectionRun[]
   sourceDocuments SourceDocument[]
+  images   ProductImage[]
 }
 
 model CollectionRun {
@@ -138,6 +139,7 @@ model ProductImage {
   status    ReviewStatus @default(PENDING)
   createdAt DateTime @default(now())
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  market    Market?  @relation(fields: [marketId], references: [id], onDelete: SetNull)
 }
 
 model Offer {

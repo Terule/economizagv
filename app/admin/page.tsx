@@ -10,27 +10,36 @@ import { findDuplicatePairs, findProductMatches } from "@/lib/product-match";
 export default async function AdminPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!isAdmin(session?.user.email)) redirect("/");
-  const [pendingOffers, catalogProducts, approvedCount, completedRuns] =
-    await Promise.all([
-      db.offer.findMany({
-        where: { reviewState: "PENDING", source: "FLYER" },
-        include: { product: true, market: true, store: true },
-        orderBy: { capturedAt: "desc" },
-      }),
-      db.product.findMany({
-        select: {
-          id: true,
-          name: true,
-          normalized: true,
-          brand: true,
-          packageSize: true,
-        },
-        take: 250,
-        orderBy: { updatedAt: "desc" },
-      }),
-      db.offer.count({ where: { reviewState: "APPROVED" } }),
-      db.collectionRun.count({ where: { status: "COMPLETED" } }),
-    ]);
+  const [
+    pendingOffers,
+    catalogProducts,
+    markets,
+    approvedCount,
+    completedRuns,
+  ] = await Promise.all([
+    db.offer.findMany({
+      where: { reviewState: "PENDING", source: "FLYER" },
+      include: { product: true, market: true, store: true },
+      orderBy: { capturedAt: "desc" },
+    }),
+    db.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        normalized: true,
+        brand: true,
+        packageSize: true,
+      },
+      take: 250,
+      orderBy: { updatedAt: "desc" },
+    }),
+    db.market.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.offer.count({ where: { reviewState: "APPROVED" } }),
+    db.collectionRun.count({ where: { status: "COMPLETED" } }),
+  ]);
   const reviewOffers = pendingOffers.map((offer) => ({
     id: offer.id,
     productId: offer.product.id,
@@ -100,6 +109,7 @@ export default async function AdminPage() {
         </aside>
       </div>
       <AdminProductImageUploader
+        markets={markets}
         products={catalogProducts.map((product) => ({
           id: product.id,
           name: product.name,

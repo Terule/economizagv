@@ -30,7 +30,7 @@ type ApiProduct = {
   name: string;
   brand: string | null;
   packageSize: string | null;
-  images: Array<{ url: string }>;
+  images: Array<{ url: string; market: { name: string } | null }>;
   offers: ApiOffer[];
 };
 type SavedListItem = {
@@ -42,28 +42,35 @@ type SavedListItem = {
 };
 type SavedList = { id: string; name: string; items: SavedListItem[] };
 function toCatalogProduct(product: ApiProduct): CatalogProduct {
+  const marketImages = product.images.flatMap((image) =>
+    image.market ? [{ market: image.market.name, url: image.url }] : [],
+  );
+  const prices: CatalogProduct["prices"] = product.offers.map((offer) => ({
+    id: offer.id,
+    market: offer.market.name,
+    district: offer.store.district,
+    amount: Number(offer.price),
+    type:
+      offer.kind === "RECEIPT"
+        ? "cupom_aprovado"
+        : offer.kind === "HISTORICAL"
+          ? "histórico_desatualizado"
+          : "vigente",
+    referenceDate: new Date(offer.capturedAt).toLocaleDateString("pt-BR"),
+    validUntil: offer.validUntil
+      ? new Date(offer.validUntil).toLocaleDateString("pt-BR")
+      : undefined,
+    image: marketImages.find((image) => image.market === offer.market.name)
+      ?.url,
+  }));
   return {
     id: product.id,
     name: product.name,
     brand: product.brand ?? "Sem marca",
     packageSize: product.packageSize ?? "Embalagem não informada",
-    image: product.images[0]?.url,
-    prices: product.offers.map((offer) => ({
-      id: offer.id,
-      market: offer.market.name,
-      district: offer.store.district,
-      amount: Number(offer.price),
-      type:
-        offer.kind === "RECEIPT"
-          ? "cupom_aprovado"
-          : offer.kind === "HISTORICAL"
-            ? "histórico_desatualizado"
-            : "vigente",
-      referenceDate: new Date(offer.capturedAt).toLocaleDateString("pt-BR"),
-      validUntil: offer.validUntil
-        ? new Date(offer.validUntil).toLocaleDateString("pt-BR")
-        : undefined,
-    })),
+    image: product.images.find((image) => image.market === null)?.url,
+    marketImages,
+    prices,
   };
 }
 function hydrateList(list: SavedList, products: CatalogProduct[]): ListEntry[] {
@@ -313,7 +320,7 @@ export function Home() {
                   onClick={() => setSelected(product)}
                 >
                   <ProductThumbnail
-                    image={product.image}
+                    image={best?.image ?? product.image}
                     name={product.brand}
                   />
                   <span className="product-copy">
@@ -375,6 +382,11 @@ export function Home() {
                     className={`market-price ${price.type === "histórico_desatualizado" ? "stale" : ""}`}
                     key={price.id}
                   >
+                    <ProductThumbnail
+                      className="market-thumbnail"
+                      image={price.image}
+                      name={price.market}
+                    />
                     <div>
                       <b>{price.market}</b>
                       <span>

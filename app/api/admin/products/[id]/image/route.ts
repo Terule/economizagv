@@ -10,7 +10,9 @@ export async function POST(
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session || !isAdmin(session.user.email))
     return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
-  const file = (await request.formData()).get("image");
+  const formData = await request.formData();
+  const file = formData.get("image");
+  const marketId = formData.get("marketId");
   if (
     !(file instanceof File) ||
     !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
@@ -23,10 +25,17 @@ export async function POST(
     );
   const { id } = await params;
   await db.product.findUniqueOrThrow({ where: { id } });
+  if (typeof marketId !== "string" || !marketId)
+    return NextResponse.json(
+      { error: "Selecione o supermercado da imagem." },
+      { status: 400 },
+    );
+  await db.market.findUniqueOrThrow({ where: { id: marketId } });
   const image = await putApprovedProductImage(file, id);
   const record = await db.productImage.create({
     data: {
       productId: id,
+      marketId,
       url: image.url,
       storageKey: image.key,
       source: "WEB",

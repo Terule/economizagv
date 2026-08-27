@@ -563,9 +563,19 @@ input {
 }
 .market-price {
   display: flex;
+  align-items: center;
+  gap: 10px;
   justify-content: space-between;
   padding: 14px 0;
   border-top: 1px solid var(--line);
+}
+.market-price .market-thumbnail {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+}
+.market-price > div:last-child {
+  margin-left: auto;
 }
 .market-price > div:last-child {
   align-items: end;

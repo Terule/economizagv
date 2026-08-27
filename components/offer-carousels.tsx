@@ -63,7 +63,7 @@ function OffersCarousel({
                           : "Menor estimativa"}
                       </Badge>
                       <ProductThumbnail
-                        image={product.image}
+                        image={price?.image ?? product.image}
                         name={product.name}
                       />
                     </div>
