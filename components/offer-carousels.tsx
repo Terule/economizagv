@@ -37,12 +37,18 @@ function OffersCarousel({
         <span className="eyebrow">ECONOMIZA GV</span>
         <h2>{title}</h2>
       </div>
-      <Carousel className="offer-carousel" opts={{ align: "start" }}>
+      <Carousel
+        className="offer-carousel"
+        opts={{ align: "start", loop: items.length > 3 }}
+      >
         <CarouselContent>
           {items.map((product) => {
             const price = recommendedPrice(product.prices);
             return (
-              <CarouselItem className="offer-carousel-item" key={product.id}>
+              <CarouselItem
+                className="basis-80 shrink-0 grow-0"
+                key={product.id}
+              >
                 <Card>
                   <CardHeader>
                     <Badge
