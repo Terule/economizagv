@@ -63,7 +63,7 @@ function OffersCarousel({
                     <CardTitle className="line-clamp-2">
                       {product.name}
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="line-clamp-1">
                       {product.brand} · {product.packageSize}
                     </CardDescription>
                   </CardHeader>

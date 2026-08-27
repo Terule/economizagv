@@ -377,6 +377,9 @@ h2 {
   margin: 4px 0 14px;
 }
 .offer-carousel {
+  width: 1044px;
+  max-width: 100%;
+  margin: 0 auto;
   padding: 0 42px;
 }
 .offer-carousel [data-slot="carousel-previous"] {
@@ -386,11 +389,14 @@ h2 {
   right: 0;
 }
 .offers-section [data-slot="card"] {
-  min-height: 175px;
+  width: 320px;
+  height: 260px;
+  min-height: 260px;
 }
 .offers-section [data-slot="card-content"] {
   display: flex;
   flex-direction: column;
+  margin-top: auto;
   gap: 5px;
 }
 .offers-section [data-slot="card-content"] p,
