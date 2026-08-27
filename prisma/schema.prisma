@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String        @id
+  name          String
+  email         String        @unique
+  emailVerified Boolean       @default(false)
+  image         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  lists         ShoppingList[]
+  receipts      Receipt[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String   @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([identifier, value])
+}
+
+model Market {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  slug     String  @unique
+  stores   Store[]
+  offers   Offer[]
+  receipts Receipt[]
+}
+
+model Store {
+  id       String  @id @default(cuid())
+  marketId String
+  market   Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  name     String
+  district String
+  city     String  @default("Governador Valadares")
+  state    String  @default("MG")
+  offers   Offer[]
+  receipts Receipt[]
+  @@unique([marketId, name])
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  normalized  String      @unique
+  brand       String?
+  variant     String?
+  packageSize String?
+  unit         String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  offers      Offer[]
+  images      ProductImage[]
+  listItems   ListItem[]
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  marketId  String?
+  url        String
+  storageKey String?  @unique
+  source    ImageSource
+  status    ReviewStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Offer {
+  id          String       @id @default(cuid())
+  productId   String
+  marketId    String
+  storeId     String
+  price       Decimal      @db.Decimal(10, 2)
+  kind        PriceKind
+  source      OfferSource
+  sourceUrl   String?
+  validFrom   DateTime?
+  validUntil  DateTime?
+  capturedAt  DateTime     @default(now())
+  confidence  Float        @default(1)
+  reviewState ReviewStatus @default(APPROVED)
+  receiptId   String?
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  market      Market       @relation(fields: [marketId], references: [id])
+  store       Store        @relation(fields: [storeId], references: [id])
+  receipt     Receipt?     @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  @@index([productId, validUntil])
+}
+
+model ShoppingList {
+  id        String     @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     ListItem[]
+}
+
+model ListItem {
+  id          String       @id @default(cuid())
+  listId      String
+  productId   String?
+  label       String
+  quantity    Int          @default(1)
+  manualPrice Decimal?     @db.Decimal(10, 2)
+  list        ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  product     Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model Receipt {
+  id            String       @id @default(cuid())
+  userId        String
+  marketId      String
+  storeId       String
+  purchasedAt   DateTime
+  fileName      String
+  storageKey    String   @unique
+  extractedText String?
+  ocrConfidence Float?
+  declaredMatch Boolean?
+  status        ReviewStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  reviewedAt    DateTime?
+  reviewedBy    String?
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market        Market       @relation(fields: [marketId], references: [id])
+  store         Store        @relation(fields: [storeId], references: [id])
+  offers        Offer[]
+}
+
+model ReviewLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  decision  String
+  note      String?
+  reviewer  String
+  createdAt DateTime @default(now())
+}
+
+enum PriceKind {
+  CURRENT
+  RECEIPT
+  HISTORICAL
+  MANUAL
+}
+
+enum OfferSource {
+  DAILY_OFFER
+  FLYER
+  RECEIPT
+}
+
+enum ImageSource {
+  MARKET
+  WEB
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
