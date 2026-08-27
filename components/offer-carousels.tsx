@@ -31,13 +31,16 @@ function OffersCarousel({
         <span className="eyebrow">ECONOMIZA GV</span>
         <h2>{title}</h2>
       </div>
-      <Carousel opts={{ align: "start", loop: items.length > 3 }}>
-        <CarouselContent>
+      <Carousel
+        className="w-full"
+        opts={{ align: "start", loop: items.length > 3 }}
+      >
+        <CarouselContent className="ml-0 px-10">
           {items.map((product) => {
             const price = recommendedPrice(product.prices);
             return (
               <CarouselItem
-                className="basis-full md:basis-1/2 lg:basis-1/3"
+                className="basis-72 pl-3 sm:basis-80"
                 key={product.id}
               >
                 <Card>
@@ -69,8 +72,8 @@ function OffersCarousel({
             );
           })}
         </CarouselContent>
-        <CarouselPrevious />
-        <CarouselNext />
+        <CarouselPrevious className="left-0" />
+        <CarouselNext className="right-0" />
       </Carousel>
     </section>
   );
