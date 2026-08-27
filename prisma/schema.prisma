@@ -89,7 +89,10 @@ model SourceDocument {
   url       String
   kind      OfferSource
   title     String?
+  extractedText String?
+  ocrConfidence Float?
   fetchedAt DateTime     @default(now())
+  processedAt DateTime?
   status    ReviewStatus @default(PENDING)
   market    Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
   @@unique([marketId, url])

@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { db } from "../lib/db";
+import { extractPdfOffers } from "./flyer-ocr";
 
 type Source = { kind: "DAILY_OFFER" | "FLYER"; url: string };
 type Market = {
@@ -72,6 +73,61 @@ function extractOffers(html: string) {
   return [...offers.values()];
 }
 
+async function persistOffer(
+  offer: { name: string; price: number; confidence?: number },
+  marketId: string,
+  storeId: string,
+  sourceUrl: string,
+  source: "DAILY_OFFER" | "FLYER",
+) {
+  const product = await db.product.upsert({
+    where: { normalized: normalize(offer.name) },
+    update: { name: offer.name },
+    create: { name: offer.name, normalized: normalize(offer.name) },
+  });
+  await db.offer.create({
+    data: {
+      productId: product.id,
+      marketId,
+      storeId,
+      price: offer.price,
+      kind: "CURRENT",
+      source,
+      sourceUrl,
+      validFrom: new Date(),
+      confidence: offer.confidence ?? 1,
+      reviewState: (offer.confidence ?? 1) >= 0.8 ? "APPROVED" : "PENDING",
+    },
+  });
+}
+
+async function processFlyer(url: string, marketId: string, storeId: string) {
+  const response = await fetch(url, {
+    headers: { "User-Agent": "EconomizaGV/1.0" },
+  });
+  if (!response.ok) throw new Error(`${response.status} ao baixar ${url}`);
+  const { text, offers } = await extractPdfOffers(
+    Buffer.from(await response.arrayBuffer()),
+  );
+  const document = await db.sourceDocument.update({
+    where: { marketId_url: { marketId, url } },
+    data: {
+      extractedText: text,
+      ocrConfidence: offers.length
+        ? Math.min(...offers.map((offer) => offer.confidence))
+        : 0,
+      processedAt: new Date(),
+      status: offers.length ? "APPROVED" : "PENDING",
+    },
+  });
+  await db.offer.deleteMany({
+    where: { marketId, storeId, sourceUrl: document.url },
+  });
+  for (const offer of offers)
+    await persistOffer(offer, marketId, storeId, url, "FLYER");
+  return offers.length;
+}
+
 async function ingest(definition: Market) {
   const market = await db.market.upsert({
     where: { slug: definition.slug },
@@ -127,24 +183,15 @@ async function ingest(definition: Market) {
         ? extractOffers(html)
         : []) {
         discovered++;
-        const product = await db.product.upsert({
-          where: { normalized: normalize(offer.name) },
-          update: { name: offer.name },
-          create: { name: offer.name, normalized: normalize(offer.name) },
-        });
-        await db.offer.create({
-          data: {
-            productId: product.id,
-            marketId: market.id,
-            storeId: store.id,
-            price: offer.price,
-            kind: "CURRENT",
-            source: source.kind,
-            sourceUrl: source.url,
-            validFrom: new Date(),
-          },
-        });
+        await persistOffer(offer, market.id, store.id, source.url, source.kind);
         published++;
+      }
+      for (const url of urls.filter((url) =>
+        url.toLowerCase().includes(".pdf"),
+      )) {
+        const count = await processFlyer(url, market.id, store.id);
+        discovered += count;
+        published += count;
       }
     }
     await db.collectionRun.update({
