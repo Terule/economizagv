@@ -9,8 +9,8 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { products } from "@/lib/demo-data";
 import { recommendedPrice } from "@/lib/pricing";
+import type { CatalogProduct } from "@/lib/types";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -22,8 +22,9 @@ function OffersCarousel({
   items,
 }: {
   title: string;
-  items: typeof products;
+  items: CatalogProduct[];
 }) {
+  if (items.length === 0) return null;
   return (
     <section className="offers-section">
       <div>
@@ -75,7 +76,7 @@ function OffersCarousel({
   );
 }
 
-export function OfferCarousels() {
+export function OfferCarousels({ products }: { products: CatalogProduct[] }) {
   const daily = products.filter((product) =>
     product.prices.some((price) => price.type === "vigente"),
   );

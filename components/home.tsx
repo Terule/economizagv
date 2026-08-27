@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OfferCarousels } from "@/components/offer-carousels";
-import { products } from "@/lib/demo-data";
 import { entryPrice, recommendedPrice, splitList } from "@/lib/pricing";
 import type { CatalogProduct, ListEntry } from "@/lib/types";
 
@@ -15,13 +14,61 @@ const typeLabel = {
   cupom_aprovado: "Cupom aprovado",
   histórico_desatualizado: "Preço desatualizado",
 };
+type ApiOffer = {
+  id: string;
+  price: string | number;
+  kind: string;
+  capturedAt: string;
+  validUntil: string | null;
+  market: { name: string };
+  store: { district: string };
+};
+type ApiProduct = {
+  id: string;
+  name: string;
+  brand: string | null;
+  packageSize: string | null;
+  offers: ApiOffer[];
+};
+function toCatalogProduct(product: ApiProduct): CatalogProduct {
+  return {
+    id: product.id,
+    name: product.name,
+    brand: product.brand ?? "Sem marca",
+    packageSize: product.packageSize ?? "Embalagem não informada",
+    prices: product.offers.map((offer) => ({
+      id: offer.id,
+      market: offer.market.name,
+      district: offer.store.district,
+      amount: Number(offer.price),
+      type:
+        offer.kind === "RECEIPT"
+          ? "cupom_aprovado"
+          : offer.kind === "HISTORICAL"
+            ? "histórico_desatualizado"
+            : "vigente",
+      referenceDate: new Date(offer.capturedAt).toLocaleDateString("pt-BR"),
+      validUntil: offer.validUntil
+        ? new Date(offer.validUntil).toLocaleDateString("pt-BR")
+        : undefined,
+    })),
+  };
+}
 
 export function Home() {
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<ListEntry[]>([]);
-  const [selected, setSelected] = useState<CatalogProduct | null>(products[0]);
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [selected, setSelected] = useState<CatalogProduct | null>(null);
   const [newProduct, setNewProduct] = useState("");
   const [manualPrice, setManualPrice] = useState("");
+  useEffect(() => {
+    fetch("/api/products")
+      .then((response) => (response.ok ? response.json() : []))
+      .then((catalog: ApiProduct[]) =>
+        setProducts(catalog.map(toCatalogProduct)),
+      );
+  }, []);
   const visible = products.filter((product) =>
     `${product.name} ${product.brand}`
       .toLowerCase()
@@ -73,12 +120,18 @@ export function Home() {
           </p>
         </div>
         <div className="hero-card">
-          <b>{products.length * 3}+ preços</b>
+          <b>
+            {products.reduce(
+              (total, product) => total + product.prices.length,
+              0,
+            )}{" "}
+            preços
+          </b>
           <span>monitorados diariamente</span>
           <small>Coelho Diniz · Big Mais · BH</small>
         </div>
       </section>
-      <OfferCarousels />
+      <OfferCarousels products={products} />
       <section className="workspace">
         <div className="catalog panel">
           <div className="section-title">
