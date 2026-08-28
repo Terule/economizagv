@@ -56,7 +56,7 @@ const markets: Market[] = [
     sources: [
       {
         kind: "FLYER",
-        url: "https://www.martminas.com.br/",
+        url: "https://www.martminas.com.br/loja/governador-valadares/",
       },
     ],
   },
