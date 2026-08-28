@@ -143,6 +143,30 @@ function extractOffers(html: string, sourceUrl: string) {
   return [...offers.values()];
 }
 
+function extractFlyerUrls(html: string, sourceUrl: string) {
+  const $ = cheerio.load(html);
+  const links = [
+    ...$("a[href$='.pdf']")
+      .map((_, link) => $(link).attr("href") ?? "")
+      .get(),
+    ...[...html.matchAll(/"urlFinalDocument":"([^"]+)"/g)].map((match) =>
+      match[1].replace(/\\u0026|&amp;/g, "&"),
+    ),
+  ];
+  return [
+    ...new Set(
+      links.filter(Boolean).map((href) => new URL(href, sourceUrl).toString()),
+    ),
+  ];
+}
+
+function isFlyerUrl(url: string) {
+  return (
+    url.toLowerCase().includes(".pdf") ||
+    url.includes("/api-middleware-flyer-services/")
+  );
+}
+
 async function persistOffer(
   offer: ExtractedOffer & { confidence?: number },
   marketId: string,
@@ -347,15 +371,7 @@ async function ingest(definition: Market) {
       if (!response.ok)
         throw new Error(`${response.status} ao buscar ${source.url}`);
       const html = await response.text();
-      const $ = cheerio.load(html);
-      const urls = [
-        source.url,
-        ...$("a[href$='.pdf']")
-          .map((_, link) =>
-            new URL($(link).attr("href") ?? "", source.url).toString(),
-          )
-          .get(),
-      ];
+      const urls = [source.url, ...extractFlyerUrls(html, source.url)];
       await Promise.all(
         urls.map((url) =>
           db.sourceDocument.upsert({
@@ -364,8 +380,8 @@ async function ingest(definition: Market) {
             create: {
               marketId: market.id,
               url,
-              kind: url.endsWith(".pdf") ? "FLYER" : source.kind,
-              status: url.endsWith(".pdf") ? "PENDING" : "APPROVED",
+              kind: isFlyerUrl(url) ? "FLYER" : source.kind,
+              status: isFlyerUrl(url) ? "PENDING" : "APPROVED",
             },
           }),
         ),
@@ -384,9 +400,7 @@ async function ingest(definition: Market) {
         );
         published++;
       }
-      for (const url of urls.filter((url) =>
-        url.toLowerCase().includes(".pdf"),
-      )) {
+      for (const url of urls.filter(isFlyerUrl)) {
         const count = await processFlyer(url, market.id, store.id, market.slug);
         discovered += count;
         published += count;
