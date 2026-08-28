@@ -18,6 +18,7 @@ const brands = [
   "Lola",
   "Ypê",
   "Lor",
+  "Omo",
 ];
 const categoryWords = new Set([
   "cafe",
@@ -30,6 +31,8 @@ const categoryWords = new Set([
   "capsula",
   "cápsula",
   "shampoo",
+  "sabao",
+  "sabão",
   "sabonete",
 ]);
 const packagePattern =

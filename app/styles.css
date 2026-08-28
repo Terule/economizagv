@@ -611,6 +611,43 @@ input {
   font-weight: 800;
   cursor: pointer;
 }
+.value-suggestion,
+.list-value-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f3f9e7;
+  color: #315442;
+  font-size: 12px;
+}
+.value-suggestion > span,
+.value-suggestion small {
+  color: #54705e;
+}
+.list-entry {
+  border-bottom: 1px solid var(--line);
+}
+.list-entry .list-item {
+  border-bottom: 0;
+}
+.list-value-suggestion {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 10px;
+}
+.list-value-suggestion button {
+  width: auto;
+  height: auto;
+  padding: 6px 8px;
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 700;
+  white-space: nowrap;
+}
 .list {
   margin-top: 18px;
 }

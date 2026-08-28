@@ -26,6 +26,14 @@ export type CatalogProduct = {
   alternatives?: { name: string; amount: number; market: string }[];
 };
 
+export type ValueSuggestion = {
+  product: CatalogProduct;
+  price: ProductPrice;
+  unitPrice: number;
+  unit: "L" | "kg" | "un";
+  savingsPercent: number;
+};
+
 export type ListEntry = {
   id: string;
   label: string;

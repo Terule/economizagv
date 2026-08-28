@@ -5,7 +5,7 @@ import { OfferCarousels } from "@/components/offer-carousels";
 import { ProductThumbnail } from "@/components/product-thumbnail";
 import { authClient } from "@/lib/auth-client";
 import { entryPrice, recommendedPrice, splitList } from "@/lib/pricing";
-import type { CatalogProduct, ListEntry } from "@/lib/types";
+import type { CatalogProduct, ListEntry, ValueSuggestion } from "@/lib/types";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -41,6 +41,7 @@ type SavedListItem = {
   manualPrice: string | number | null;
 };
 type SavedList = { id: string; name: string; items: SavedListItem[] };
+type SuggestionResponse = { suggestion: ValueSuggestion | null };
 function toCatalogProduct(product: ApiProduct): CatalogProduct {
   const marketImages = product.images.flatMap((image) =>
     image.market ? [{ market: image.market.name, url: image.url }] : [],
@@ -96,6 +97,9 @@ export function Home() {
   const [savedLists, setSavedLists] = useState<SavedList[]>([]);
   const [activeListId, setActiveListId] = useState<string>();
   const [listName, setListName] = useState("");
+  const [suggestions, setSuggestions] = useState<
+    Record<string, ValueSuggestion | null | undefined>
+  >({});
   useEffect(() => {
     fetch("/api/products")
       .then((response) => (response.ok ? response.json() : []))
@@ -122,6 +126,29 @@ export function Home() {
     setListName(list.name);
     setEntries(hydrateList(list, products));
   }, [activeListId, products, savedLists]);
+  useEffect(() => {
+    const productIds = new Set(
+      [selected, ...entries.map((entry) => entry.product)].flatMap((product) =>
+        product ? [product.id] : [],
+      ),
+    );
+    const missing = [...productIds].filter((id) => !(id in suggestions));
+    if (!missing.length) return;
+    void Promise.all(
+      missing.map(async (id) => {
+        const response = await fetch(`/api/products/${id}/suggestions`);
+        const data = response.ok
+          ? ((await response.json()) as SuggestionResponse)
+          : { suggestion: null };
+        return [id, data.suggestion] as const;
+      }),
+    ).then((results) =>
+      setSuggestions((current) => ({
+        ...current,
+        ...Object.fromEntries(results),
+      })),
+    );
+  }, [entries, selected, suggestions]);
   const visible = products.filter((product) =>
     `${product.name} ${product.brand}`
       .toLowerCase()
@@ -228,6 +255,50 @@ export function Home() {
     if (session?.user && activeListId)
       void fetch(`/api/lists/${activeListId}/items/${id}`, {
         method: "DELETE",
+      });
+  };
+  const applySuggestedPackage = (
+    entry: ListEntry,
+    suggestion: ValueSuggestion,
+  ) => {
+    const changes = {
+      label: suggestion.product.name,
+      product: suggestion.product,
+      manualPrice: undefined,
+    };
+    setEntries((current) =>
+      current.map((item) =>
+        item.id === entry.id ? { ...item, ...changes } : item,
+      ),
+    );
+    setSavedLists((current) =>
+      current.map((list) =>
+        list.id === activeListId
+          ? {
+              ...list,
+              items: list.items.map((item) =>
+                item.id === entry.id
+                  ? {
+                      ...item,
+                      label: changes.label,
+                      productId: suggestion.product.id,
+                      manualPrice: null,
+                    }
+                  : item,
+              ),
+            }
+          : list,
+      ),
+    );
+    if (session?.user && activeListId)
+      void fetch(`/api/lists/${activeListId}/items/${entry.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: changes.label,
+          productId: suggestion.product.id,
+          manualPrice: null,
+        }),
       });
   };
   const renameList = async () => {
@@ -404,6 +475,25 @@ export function Home() {
                   </div>
                 ))}
               </div>
+              {suggestions[selected.id] ? (
+                <div className="value-suggestion">
+                  <span>
+                    💡 Melhor custo por {suggestions[selected.id]?.unit}
+                  </span>
+                  <b>{suggestions[selected.id]?.product.name}</b>
+                  <small>
+                    {money.format(suggestions[selected.id]?.price.amount ?? 0)}{" "}
+                    · {money.format(suggestions[selected.id]?.unitPrice ?? 0)}/
+                    {suggestions[selected.id]?.unit} ·{" "}
+                    {Math.round(suggestions[selected.id]?.savingsPercent ?? 0)}%
+                    mais econômico
+                  </small>
+                  <small>
+                    {suggestions[selected.id]?.price.market} ·{" "}
+                    {suggestions[selected.id]?.price.district}
+                  </small>
+                </div>
+              ) : null}
               {selected.alternatives?.map((alternative) => (
                 <div className="alternative" key={alternative.name}>
                   <span>
@@ -520,46 +610,69 @@ export function Home() {
                 </div>
                 {group.entries.map((entry) => {
                   const price = entryPrice(entry);
+                  const suggestion = entry.product
+                    ? suggestions[entry.product.id]
+                    : null;
                   return (
-                    <div className="list-item" key={entry.id}>
-                      <span>{entry.label}</span>
-                      <div>
-                        <button
-                          type="button"
-                          aria-label="Diminuir quantidade"
-                          onClick={() =>
-                            updateEntry(entry.id, {
-                              quantity: Math.max(1, entry.quantity - 1),
-                            })
-                          }
-                        >
-                          −
-                        </button>
-                        <b>{entry.quantity}</b>
-                        <button
-                          type="button"
-                          aria-label="Aumentar quantidade"
-                          onClick={() =>
-                            updateEntry(entry.id, {
-                              quantity: entry.quantity + 1,
-                            })
-                          }
-                        >
-                          +
-                        </button>
-                        <b>
-                          {price.amount === undefined
-                            ? "—"
-                            : money.format(price.amount * entry.quantity)}
-                        </b>
-                        <button
-                          type="button"
-                          className="remove"
-                          onClick={() => removeEntry(entry.id)}
-                        >
-                          ×
-                        </button>
+                    <div className="list-entry" key={entry.id}>
+                      <div className="list-item">
+                        <span>{entry.label}</span>
+                        <div>
+                          <button
+                            type="button"
+                            aria-label="Diminuir quantidade"
+                            onClick={() =>
+                              updateEntry(entry.id, {
+                                quantity: Math.max(1, entry.quantity - 1),
+                              })
+                            }
+                          >
+                            −
+                          </button>
+                          <b>{entry.quantity}</b>
+                          <button
+                            type="button"
+                            aria-label="Aumentar quantidade"
+                            onClick={() =>
+                              updateEntry(entry.id, {
+                                quantity: entry.quantity + 1,
+                              })
+                            }
+                          >
+                            +
+                          </button>
+                          <b>
+                            {price.amount === undefined
+                              ? "—"
+                              : money.format(price.amount * entry.quantity)}
+                          </b>
+                          <button
+                            type="button"
+                            className="remove"
+                            onClick={() => removeEntry(entry.id)}
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
+                      {suggestion ? (
+                        <div className="list-value-suggestion">
+                          <span>
+                            💡 {suggestion.product.name} custa{" "}
+                            {money.format(suggestion.unitPrice)}/
+                            {suggestion.unit} (
+                            {Math.round(suggestion.savingsPercent)}% menos)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              applySuggestedPackage(entry, suggestion)
+                            }
+                          >
+                            Usar esta opção
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}

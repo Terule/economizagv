@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 const updateItem = z.object({
   quantity: z.number().int().positive().optional(),
   manualPrice: z.number().positive().nullable().optional(),
+  productId: z.string().nullable().optional(),
+  label: z.string().trim().min(1).max(180).optional(),
 });
 
 async function ownedItem(request: Request, listId: string, itemId: string) {
