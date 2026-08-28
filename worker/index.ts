@@ -48,6 +48,30 @@ const markets: Market[] = [
       },
     ],
   },
+  {
+    name: "Mart Minas",
+    slug: "mart-minas",
+    store: "Governador Valadares — Av. JK, 3519",
+    district: "Santa Rita",
+    sources: [
+      {
+        kind: "FLYER",
+        url: "https://www.martminas.com.br/",
+      },
+    ],
+  },
+  {
+    name: "Atacadão",
+    slug: "atacadao",
+    store: "Governador Valadares — Travessa Rio Bahia, 667",
+    district: "Itaobim",
+    sources: [
+      {
+        kind: "DAILY_OFFER",
+        url: "https://www.atacadao.com.br/loja/governador-valadares",
+      },
+    ],
+  },
 ];
 
 type ExtractedOffer = { name: string; price: number; imageUrl?: string };
