@@ -2,7 +2,11 @@ import * as cheerio from "cheerio";
 import { db } from "../lib/db";
 import { normalizeProduct } from "../lib/product-normalization";
 import { putOfficialProductImage } from "../lib/storage";
-import { extractPdfOffers, type FlyerProductImage } from "./flyer-ocr";
+import {
+  extractPdfOffers,
+  type FlyerProductImage,
+  type FlyerValidity,
+} from "./flyer-ocr";
 
 type Source = { kind: "DAILY_OFFER" | "FLYER"; url: string };
 type Market = {
@@ -75,6 +79,7 @@ const markets: Market[] = [
 ];
 
 type ExtractedOffer = { name: string; price: number; imageUrl?: string };
+const dailyOfferLifetimeMs = 24 * 60 * 60 * 1_000;
 
 const parsePrice = (value: string) =>
   Number(value.replace("R$", "").replace(".", "").replace(",", ".").trim());
@@ -174,6 +179,7 @@ async function persistOffer(
   marketSlug: string,
   sourceUrl: string,
   source: "DAILY_OFFER" | "FLYER",
+  validity?: FlyerValidity,
 ) {
   const productData = normalizeProduct(offer.name);
   const product = await db.product.upsert({
@@ -202,9 +208,17 @@ async function persistOffer(
       kind: "CURRENT",
       source,
       sourceUrl,
-      validFrom: new Date(),
+      validFrom: validity?.validFrom ?? new Date(),
+      validUntil:
+        validity?.validUntil ??
+        (source === "DAILY_OFFER"
+          ? new Date(Date.now() + dailyOfferLifetimeMs)
+          : undefined),
       confidence: offer.confidence ?? 1,
-      reviewState: (offer.confidence ?? 1) >= 0.8 ? "APPROVED" : "PENDING",
+      reviewState:
+        (offer.confidence ?? 1) >= 0.8 && (source === "DAILY_OFFER" || validity)
+          ? "APPROVED"
+          : "PENDING",
     },
   });
   return product;
@@ -302,7 +316,7 @@ async function processFlyer(
     headers: { "User-Agent": "EconomizaGV/1.0" },
   });
   if (!response.ok) throw new Error(`${response.status} ao baixar ${url}`);
-  const { text, offers, images } = await extractPdfOffers(
+  const { text, offers, images, validity } = await extractPdfOffers(
     Buffer.from(await response.arrayBuffer()),
   );
   const document = await db.sourceDocument.update({
@@ -313,7 +327,7 @@ async function processFlyer(
         ? Math.min(...offers.map((offer) => offer.confidence))
         : 0,
       processedAt: new Date(),
-      status: offers.length ? "APPROVED" : "PENDING",
+      status: offers.length && validity ? "APPROVED" : "PENDING",
     },
   });
   await db.offer.deleteMany({
@@ -328,6 +342,7 @@ async function processFlyer(
       marketSlug,
       url,
       "FLYER",
+      validity ?? undefined,
     );
     const image = matchFlyerImage(offer, images, usedImages);
     if (image)
@@ -386,6 +401,15 @@ async function ingest(definition: Market) {
           }),
         ),
       );
+      if (source.kind === "DAILY_OFFER")
+        await db.offer.deleteMany({
+          where: {
+            marketId: market.id,
+            storeId: store.id,
+            sourceUrl: source.url,
+            source: "DAILY_OFFER",
+          },
+        });
       for (const offer of source.kind === "DAILY_OFFER"
         ? extractOffers(html, source.url)
         : []) {

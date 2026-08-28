@@ -13,9 +13,46 @@ export type FlyerProductImage = {
   text: string;
   contentType: "image/jpeg" | "image/png" | "image/webp";
 };
+export type FlyerValidity = { validFrom: Date; validUntil: Date };
 
 function parseMoney(value: string) {
   return Number(value.replace(/\./g, "").replace(",", "."));
+}
+
+function dateAtEndOfDay(day: number, month: number, year: number) {
+  return new Date(year, month - 1, day, 23, 59, 59, 999);
+}
+
+function normalizeYear(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+  const year = Number(value);
+  return year < 100 ? 2_000 + year : year;
+}
+
+/** Extracts the validity printed on Brazilian flyers, without inferring dates. */
+export function extractFlyerValidity(
+  text: string,
+  fallbackYear = new Date().getFullYear(),
+): FlyerValidity | null {
+  const range = text.match(
+    /v[aá]lid(?:ade|as)?\s*(?:de)?\s*(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\s*(?:a|at[eé])\s*(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/i,
+  );
+  if (!range) return null;
+  const [, fromDay, fromMonth, fromYear, untilDay, untilMonth, untilYear] =
+    range;
+  const startYear = normalizeYear(
+    fromYear,
+    normalizeYear(untilYear, fallbackYear),
+  );
+  const endYear = normalizeYear(untilYear, startYear);
+  const validFrom = new Date(startYear, Number(fromMonth) - 1, Number(fromDay));
+  const validUntil = dateAtEndOfDay(
+    Number(untilDay),
+    Number(untilMonth),
+    endYear,
+  );
+  if (Number.isNaN(validFrom.valueOf()) || validUntil < validFrom) return null;
+  return { validFrom, validUntil };
 }
 
 const ignoredName =
@@ -186,7 +223,12 @@ export async function extractPdfOffers(pdf: Buffer) {
       directory,
       offersByPage,
     );
-    return { text, offers, images };
+    return {
+      text,
+      offers,
+      images,
+      validity: extractFlyerValidity(text),
+    };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

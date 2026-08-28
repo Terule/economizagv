@@ -5,7 +5,7 @@ import { findBetterPackages } from "@/lib/value-suggestions";
 const currentOffer = {
   reviewState: "APPROVED" as const,
   kind: "CURRENT" as const,
-  OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
+  validUntil: { gte: new Date() },
 };
 
 export async function GET(
